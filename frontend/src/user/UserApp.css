@@ -1,0 +1,49 @@
+.user-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.user-container h1 {
+  color: #333;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.user-container > p {
+  text-align: center;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.user-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.user-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.user-card h3 {
+  margin: 0 0 0.5rem;
+  color: #1a73e8;
+}
+
+.user-card p {
+  margin: 0;
+  color: #555;
+  line-height: 1.5;
+}
