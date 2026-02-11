@@ -61,6 +61,145 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// ========== OTP System (Temporary storage) ==========
+const otpStore = new Map(); // Store OTPs temporarily: phone -> {otp, expiresAt}
+
+// Generate 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Send OTP endpoint
+app.post("/api/auth/send-otp", async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    // Store OTP
+    otpStore.set(phoneNumber, { otp, expiresAt });
+
+    // In development, log OTP to console
+    console.log(`\n📱 OTP for ${phoneNumber}: ${otp}`);
+    console.log(`Expires at: ${new Date(expiresAt).toLocaleTimeString()}\n`);
+
+    // TODO: In production, integrate SMS service (MSG91, Twilio, etc.)
+    // await sendSMS(phoneNumber, `Your PrintHub OTP is: ${otp}`);
+
+    res.json({ 
+      message: "OTP sent successfully",
+      // In development, return OTP (REMOVE IN PRODUCTION)
+      development: { otp }
+    });
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify OTP endpoint
+app.post("/api/auth/verify-otp", async (req, res) => {
+  try {
+    const { phoneNumber, otp, name, profileType } = req.body;
+
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
+    }
+
+    // Check if OTP exists
+    const storedData = otpStore.get(phoneNumber);
+    if (!storedData) {
+      return res.status(400).json({ error: "OTP not found. Please request a new one." });
+    }
+
+    // Check if OTP expired
+    if (Date.now() > storedData.expiresAt) {
+      otpStore.delete(phoneNumber);
+      return res.status(400).json({ error: "OTP expired. Please request a new one." });
+    }
+
+    // Verify OTP
+    if (storedData.otp !== otp) {
+      return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    // OTP verified, delete from store
+    otpStore.delete(phoneNumber);
+
+    // Check if user exists
+    if (!db) return res.status(503).json({ error: "Firebase not initialized" });
+    
+    const usersSnapshot = await db.collection("users").where("phone", "==", phoneNumber).get();
+    
+    let user;
+    if (usersSnapshot.empty && name) {
+      // New user - create account
+      const userData = {
+        name,
+        phone: phoneNumber,
+        email: `${phoneNumber.replace(/\+/g, '')}@printhub.app`,
+        profileType: profileType || "Regular",
+        role: "user",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastActive: admin.firestore.FieldValue.serverTimestamp(),
+        orders: 0,
+        totalSpent: 0,
+      };
+      
+      const userRef = await db.collection("users").add(userData);
+      user = { id: userRef.id, ...userData };
+      
+      // Create custom Firebase Auth token
+      const token = await admin.auth().createCustomToken(userRef.id, { phone: phoneNumber });
+      
+      res.json({ 
+        message: "Registration successful",
+        user,
+        token
+      });
+    } else if (!usersSnapshot.empty) {
+      // Existing user - login
+      const userDoc = usersSnapshot.docs[0];
+      user = { id: userDoc.id, ...userDoc.data() };
+      
+      // Update last active
+      await db.collection("users").doc(userDoc.id).update({
+        lastActive: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Create custom Firebase Auth token
+      const token = await admin.auth().createCustomToken(userDoc.id, { phone: phoneNumber });
+      
+      res.json({ 
+        message: "Login successful",
+        user,
+        token
+      });
+    } else {
+      res.status(400).json({ error: "User not found. Please register first." });
+    }
+  } catch (error) {
+    console.error("Error verifying OTP:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clean up expired OTPs every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [phone, data] of otpStore.entries()) {
+    if (now > data.expiresAt) {
+      otpStore.delete(phone);
+    }
+  }
+}, 10 * 60 * 1000);
+
 // ========== Orders ==========
 app.get("/api/orders", authMiddleware, async (req, res) => {
   try {
