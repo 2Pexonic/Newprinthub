@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Plus, Edit2, Trash2, Save, X } from "lucide-react";
-import { db } from "../../firebase";
+import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
+
+const API_URL = "http://localhost:5000/api";
 
 const emptyRule = {
   colorType: "bw",

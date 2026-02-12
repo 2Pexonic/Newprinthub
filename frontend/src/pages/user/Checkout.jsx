@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { addDoc, collection, doc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { MapPin, Store, CheckCircle } from "lucide-react";
-import { db, storage } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
 import { formatCurrency, generateOrderId } from "../../utils/formatters";
-import { generateStorageFileName } from "../../utils/fileUtils";
+
+const API_URL = "http://localhost:5000/api";
 
 export default function Checkout() {
   const { currentUser, userProfile, isAuthenticated } = useAuth();
@@ -42,15 +40,21 @@ export default function Checkout() {
     setError("");
 
     try {
-      // Upload files to Firebase Storage
+      // Upload files to backend and prepare file data
       const filesData = [];
       for (const item of cartItems) {
         let fileUrl = "";
         if (item.file) {
-          const storagePath = `orders/${generateStorageFileName(item.name)}`;
-          const storageRef = ref(storage, storagePath);
-          await uploadBytes(storageRef, item.file);
-          fileUrl = await getDownloadURL(storageRef);
+          const formData = new FormData();
+          formData.append("file", item.file);
+          const uploadResponse = await fetch(`${API_URL}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          if (uploadResponse.ok) {
+            const uploadData = await uploadResponse.json();
+            fileUrl = uploadData.fileUrl;
+          }
         }
         const itemTotal = (item.price + (item.bindingCost || 0)) * (item.settings?.copies || 1);
         filesData.push({
@@ -65,12 +69,10 @@ export default function Checkout() {
       const orderId = generateOrderId();
       const orderData = {
         orderId,
-        userId: currentUser?.uid || "guest",
+        userId: currentUser?.id || "guest",
         userName: form.name,
         userPhone: form.phone,
         userEmail: form.email,
-        date: serverTimestamp(),
-        status: "pending",
         type: "Normal Print",
         total,
         files: filesData,
@@ -81,22 +83,18 @@ export default function Checkout() {
             : { address: form.address, pincode: form.pincode },
       };
 
-      const docRef = await addDoc(collection(db, "orders"), orderData);
+      const response = await fetch(`${API_URL}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
 
-      // Update user stats if authenticated
-      if (currentUser?.uid) {
-        try {
-          await updateDoc(doc(db, "users", currentUser.uid), {
-            orders: increment(1),
-            totalSpent: increment(total),
-            lastActive: serverTimestamp(),
-          });
-        } catch (err) {
-          console.error("Error updating user stats:", err);
-        }
+      if (!response.ok) {
+        throw new Error("Failed to create order");
       }
 
-      setOrderPlaced({ id: docRef.id, orderId, total });
+      const result = await response.json();
+      setOrderPlaced({ id: result.id, orderId, total });
       clearCart();
     } catch (err) {
       console.error("Order error:", err);

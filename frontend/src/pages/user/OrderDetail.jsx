@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
 import { ArrowLeft, FileText, Download, RefreshCw } from "lucide-react";
-import { db } from "../../firebase";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency, formatDateTime, getStatusColor, getStatusText, getColorTypeText, getSideTypeText } from "../../utils/formatters";
 import { useCart } from "../../contexts/CartContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
+const API_URL = "http://localhost:5000/api";
+
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { getAuthHeaders } = useAuth();
   const { addToCart } = useCart();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,9 +19,12 @@ export default function OrderDetail() {
   useEffect(() => {
     async function fetchOrder() {
       try {
-        const snap = await getDoc(doc(db, "orders", id));
-        if (snap.exists()) {
-          setOrder({ id: snap.id, ...snap.data() });
+        const response = await fetch(`${API_URL}/orders/${id}`, {
+          headers: { ...getAuthHeaders() },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setOrder(data);
         }
       } catch (error) {
         console.error("Error fetching order:", error);

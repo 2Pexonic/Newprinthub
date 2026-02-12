@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { Search, Filter, Package, Download, RefreshCw } from "lucide-react";
-import { db } from "../../firebase";
+import { Package } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency, formatDate, getStatusColor, getStatusText } from "../../utils/formatters";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
+const API_URL = "http://localhost:5000/api";
+
 export default function Orders() {
-  const { currentUser } = useAuth();
+  const { currentUser, getAuthHeaders } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,29 +20,15 @@ export default function Orders() {
     async function fetchOrders() {
       if (!currentUser) return;
       try {
-        const q = query(
-          collection(db, "orders"),
-          where("userId", "==", currentUser.uid),
-          orderBy("date", "desc")
-        );
-        const snap = await getDocs(q);
-        setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const response = await fetch(`${API_URL}/orders`, {
+          headers: { ...getAuthHeaders() },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setOrders(data);
+        }
       } catch (error) {
         console.error("Error fetching orders:", error);
-        // Fallback without orderBy if index not created
-        try {
-          const q2 = query(collection(db, "orders"), where("userId", "==", currentUser.uid));
-          const snap2 = await getDocs(q2);
-          const data = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
-          data.sort((a, b) => {
-            const da = a.date?.toDate?.() || new Date(a.date);
-            const db2 = b.date?.toDate?.() || new Date(b.date);
-            return db2 - da;
-          });
-          setOrders(data);
-        } catch (err2) {
-          console.error("Fallback also failed:", err2);
-        }
       }
       setLoading(false);
     }

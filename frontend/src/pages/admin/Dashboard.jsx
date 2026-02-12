@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
-import { Users, ShoppingBag, DollarSign, Clock, Package } from "lucide-react";
-import { db } from "../../firebase";
+import { Users, ShoppingBag, DollarSign, Clock } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency, formatDate, getStatusColor, getStatusText } from "../../utils/formatters";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
+const API_URL = "http://localhost:5000/api";
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { getAuthHeaders } = useAuth();
   const [stats, setStats] = useState({ users: 0, orders: 0, revenue: 0, pending: 0, processing: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
   const [newUsers, setNewUsers] = useState([]);
@@ -16,41 +18,30 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchDashboard() {
       try {
-        const [ordersSnap, usersSnap] = await Promise.all([
-          getDocs(collection(db, "orders")),
-          getDocs(collection(db, "users")),
+        const headers = { ...getAuthHeaders() };
+
+        const [statsRes, ordersRes, usersRes] = await Promise.all([
+          fetch(`${API_URL}/stats`, { headers }),
+          fetch(`${API_URL}/orders`, { headers }),
+          fetch(`${API_URL}/users`, { headers }),
         ]);
 
-        const allOrders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const allUsers = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
 
-        const revenue = allOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-        const pending = allOrders.filter((o) => o.status === "pending").length;
-        const processing = allOrders.filter((o) => o.status === "processing").length;
+        if (ordersRes.ok) {
+          const allOrders = await ordersRes.json();
+          setRecentOrders(allOrders.slice(0, 5));
+        }
 
-        setStats({
-          users: allUsers.length,
-          orders: allOrders.length,
-          revenue,
-          pending,
-          processing,
-        });
-
-        // Sort orders by date desc
-        allOrders.sort((a, b) => {
-          const da = a.date?.toDate?.() || new Date(a.date || 0);
-          const db2 = b.date?.toDate?.() || new Date(b.date || 0);
-          return db2 - da;
-        });
-        setRecentOrders(allOrders.slice(0, 5));
-
-        // Sort users by createdAt desc
-        allUsers.sort((a, b) => {
-          const da = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-          const db2 = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-          return db2 - da;
-        });
-        setNewUsers(allUsers.slice(0, 5));
+        if (usersRes.ok) {
+          const allUsers = await usersRes.json();
+          // Sort users by createdAt desc
+          allUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+          setNewUsers(allUsers.slice(0, 5));
+        }
       } catch (error) {
         console.error("Error fetching dashboard:", error);
       }
