@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { Plus, Edit2, Trash2, Save, X, ToggleLeft, ToggleRight } from "lucide-react";
-import { db } from "../../firebase";
+import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
+const API_URL = "http://localhost:5000/api";
+
 export default function BindingManagement() {
+  const { getAuthHeaders } = useAuth();
   const [bindings, setBindings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -13,8 +15,11 @@ export default function BindingManagement() {
 
   async function fetchBindings() {
     try {
-      const snap = await getDocs(collection(db, "bindingTypes"));
-      setBindings(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const response = await fetch(`${API_URL}/config/bindings`);
+      if (response.ok) {
+        const data = await response.json();
+        setBindings(data);
+      }
     } catch (error) {
       console.error("Error fetching bindings:", error);
     }
@@ -49,11 +54,17 @@ export default function BindingManagement() {
   async function handleSave() {
     try {
       const data = { name: form.name, isActive: form.isActive, prices: form.prices };
-      if (editingBinding) {
-        await updateDoc(doc(db, "bindingTypes", editingBinding.id), data);
-      } else {
-        await addDoc(collection(db, "bindingTypes"), data);
-      }
+      const url = editingBinding
+        ? `${API_URL}/config/bindings/${editingBinding.id}`
+        : `${API_URL}/config/bindings`;
+      const method = editingBinding ? "PUT" : "POST";
+
+      await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(data),
+      });
+
       setShowForm(false);
       setEditingBinding(null);
       setForm({ name: "", isActive: true, prices: [{ fromPage: 1, toPage: 100, studentPrice: 0, institutePrice: 0, regularPrice: 0 }] });
@@ -66,7 +77,10 @@ export default function BindingManagement() {
   async function handleDelete(id) {
     if (!confirm("Delete this binding type?")) return;
     try {
-      await deleteDoc(doc(db, "bindingTypes", id));
+      await fetch(`${API_URL}/config/bindings/${id}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
       fetchBindings();
     } catch (error) {
       console.error("Error deleting binding:", error);
@@ -75,7 +89,11 @@ export default function BindingManagement() {
 
   async function toggleActive(binding) {
     try {
-      await updateDoc(doc(db, "bindingTypes", binding.id), { isActive: !binding.isActive });
+      await fetch(`${API_URL}/config/bindings/${binding.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ isActive: !binding.isActive }),
+      });
       fetchBindings();
     } catch (error) {
       console.error("Error toggling binding:", error);

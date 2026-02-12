@@ -16,6 +16,7 @@ const emptyRule = {
 };
 
 export default function PricingManagement() {
+  const { getAuthHeaders } = useAuth();
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRule, setEditingRule] = useState(null);
@@ -24,8 +25,11 @@ export default function PricingManagement() {
 
   async function fetchRules() {
     try {
-      const snap = await getDocs(collection(db, "pricingRules"));
-      setRules(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const response = await fetch(`${API_URL}/config/pricing`);
+      if (response.ok) {
+        const data = await response.json();
+        setRules(data);
+      }
     } catch (error) {
       console.error("Error fetching rules:", error);
     }
@@ -46,11 +50,17 @@ export default function PricingManagement() {
 
   async function handleSave() {
     try {
-      if (editingRule) {
-        await updateDoc(doc(db, "pricingRules", editingRule.id), form);
-      } else {
-        await addDoc(collection(db, "pricingRules"), form);
-      }
+      const url = editingRule
+        ? `${API_URL}/config/pricing/${editingRule.id}`
+        : `${API_URL}/config/pricing`;
+      const method = editingRule ? "PUT" : "POST";
+
+      await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(form),
+      });
+
       setShowForm(false);
       setEditingRule(null);
       setForm({ ...emptyRule });
@@ -63,7 +73,10 @@ export default function PricingManagement() {
   async function handleDelete(id) {
     if (!confirm("Delete this pricing rule?")) return;
     try {
-      await deleteDoc(doc(db, "pricingRules", id));
+      await fetch(`${API_URL}/config/pricing/${id}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
       fetchRules();
     } catch (error) {
       console.error("Error deleting rule:", error);

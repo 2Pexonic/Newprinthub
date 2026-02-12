@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../../firebase";
-import { Search } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+
+const API_URL = "http://localhost:5000/api";
 
 export default function AdminUsers() {
+  const { getAuthHeaders } = useAuth();
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [profileFilter, setProfileFilter] = useState("all");
@@ -11,9 +12,13 @@ export default function AdminUsers() {
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const snap = await getDocs(collection(db, "users"));
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setUsers(data);
+        const response = await fetch(`${API_URL}/users`, {
+          headers: { ...getAuthHeaders() },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUsers(data);
+        }
       } catch (error) {
         console.error("Error fetching users:", error);
       }
@@ -75,7 +80,7 @@ export default function AdminUsers() {
                 <td>{u.profileType}</td>
                 <td>{u.orders || 0}</td>
                 <td>₹{(u.totalSpent || 0).toFixed(2)}</td>
-                <td>{u.createdAt?.toDate?.().toLocaleDateString?.() || "-"}</td>
+                <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}</td>
               </tr>
             ))}
             {filtered.length === 0 && (

@@ -72,16 +72,16 @@ export default function AdminSettings() {
               <strong>1.0.0</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--gray-light)" }}>
-              <span style={{ color: "var(--gray)" }}>Firebase Project</span>
-              <strong>printhub-4a69a</strong>
+              <span style={{ color: "var(--gray)" }}>Backend</span>
+              <strong>Express.js API</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--gray-light)" }}>
               <span style={{ color: "var(--gray)" }}>Database</span>
-              <strong>Cloud Firestore</strong>
+              <strong>JSON File Storage</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0" }}>
-              <span style={{ color: "var(--gray)" }}>Storage</span>
-              <strong>Firebase Storage</strong>
+              <span style={{ color: "var(--gray)" }}>Auth</span>
+              <strong>JWT Authentication</strong>
             </div>
           </div>
         </div>

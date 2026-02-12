@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
-import { Search, Eye, FileText, Download } from "lucide-react";
-import { db } from "../../firebase";
+import { Eye, FileText, Download } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency, formatDate, formatDateTime, getStatusColor, getStatusText, getColorTypeText, getSideTypeText } from "../../utils/formatters";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
+const API_URL = "http://localhost:5000/api";
+
 export default function AdminOrders() {
+  const { getAuthHeaders } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -14,14 +16,13 @@ export default function AdminOrders() {
 
   async function fetchOrders() {
     try {
-      const snap = await getDocs(collection(db, "orders"));
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => {
-        const da = a.date?.toDate?.() || new Date(a.date || 0);
-        const db2 = b.date?.toDate?.() || new Date(b.date || 0);
-        return db2 - da;
+      const response = await fetch(`${API_URL}/orders`, {
+        headers: { ...getAuthHeaders() },
       });
-      setOrders(data);
+      if (response.ok) {
+        const data = await response.json();
+        setOrders(data);
+      }
     } catch (error) {
       console.error("Error fetching orders:", error);
     }
@@ -32,10 +33,16 @@ export default function AdminOrders() {
 
   async function updateStatus(orderId, newStatus) {
     try {
-      await updateDoc(doc(db, "orders", orderId), { status: newStatus });
-      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o));
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder((prev) => ({ ...prev, status: newStatus }));
+      const response = await fetch(`${API_URL}/orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) {
+        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder((prev) => ({ ...prev, status: newStatus }));
+        }
       }
     } catch (error) {
       console.error("Error updating status:", error);

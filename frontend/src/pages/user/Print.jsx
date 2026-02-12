@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs } from "firebase/firestore";
 import { Upload, FileText, Image, X, ShoppingCart, CreditCard } from "lucide-react";
-import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
 import { validateFile, detectPageCount, formatFileSize } from "../../utils/fileUtils";
 import { calculatePrice, defaultPricingRules } from "../../utils/priceCalculator";
-import { formatCurrency, getColorTypeText, getSideTypeText } from "../../utils/formatters";
+import { formatCurrency } from "../../utils/formatters";
+
+const API_URL = "http://localhost:5000/api";
 
 export default function Print() {
   const { isAuthenticated, profileType } = useAuth();
@@ -36,14 +36,18 @@ export default function Print() {
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const [priceSnap, bindSnap] = await Promise.all([
-          getDocs(collection(db, "pricingRules")),
-          getDocs(collection(db, "bindingTypes")),
+        const [priceRes, bindRes] = await Promise.all([
+          fetch(`${API_URL}/config/pricing`),
+          fetch(`${API_URL}/config/bindings`),
         ]);
-        const rules = priceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const bindings = bindSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        if (rules.length > 0) setPricingRules(rules);
-        setBindingTypes(bindings.filter((b) => b.isActive));
+        if (priceRes.ok) {
+          const rules = await priceRes.json();
+          if (rules.length > 0) setPricingRules(rules);
+        }
+        if (bindRes.ok) {
+          const bindings = await bindRes.json();
+          setBindingTypes(bindings.filter((b) => b.isActive));
+        }
       } catch (error) {
         console.error("Error fetching config:", error);
       }
