@@ -1,23 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import {
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  signOut,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-  query,
-  collection,
-  where,
-  getDocs,
-} from "firebase/firestore";
-import { auth, db } from "../firebase";
+
+const API_URL = "http://localhost:5000/api";
 
 const AuthContext = createContext();
 
@@ -29,34 +12,45 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem("printhub_token"));
 
-  // Setup reCAPTCHA verifier (not needed for backend OTP)
-  function setupRecaptcha(containerId) {
-    // No longer using Firebase phone auth, so no reCAPTCHA needed
-    console.log('Using backend OTP system - no reCAPTCHA required');
+  // Get auth headers
+  function getAuthHeaders() {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  // Save token to localStorage
+  function saveToken(newToken) {
+    localStorage.setItem("printhub_token", newToken);
+    setToken(newToken);
+  }
+
+  // Clear token from localStorage
+  function clearToken() {
+    localStorage.removeItem("printhub_token");
+    setToken(null);
   }
 
   // Send OTP to phone number via backend
   async function sendOTP(phoneNumber) {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber })
+      const response = await fetch(`${API_URL}/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send OTP');
+        throw new Error(data.error || "Failed to send OTP");
       }
-      
+
       // In development, show OTP in alert
       if (data.development?.otp) {
         alert(`Development Mode - Your OTP is: ${data.development.otp}`);
       }
-      
+
       return data;
     } catch (error) {
       console.error("Error sending OTP:", error);
@@ -67,29 +61,27 @@ export function AuthProvider({ children }) {
   // Register with phone number and OTP via backend
   async function register(phoneNumber, otp, profileData) {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(`${API_URL}/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber,
           otp,
           name: profileData.name,
-          profileType: profileData.profileType
-        })
+          profileType: profileData.profileType,
+        }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify OTP');
+        throw new Error(data.error || "Failed to verify OTP");
       }
-      
-      // Sign in with custom token
-      const { signInWithCustomToken } = await import('firebase/auth');
-      const userCredential = await signInWithCustomToken(auth, data.token);
-      
+
+      saveToken(data.token);
+      setCurrentUser({ id: data.user.id });
       setUserProfile(data.user);
-      return userCredential;
+      return data;
     } catch (error) {
       console.error("Error registering:", error);
       throw error;
@@ -99,90 +91,127 @@ export function AuthProvider({ children }) {
   // Login with phone number and OTP via backend
   async function login(phoneNumber, otp) {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, otp })
+      const response = await fetch(`${API_URL}/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber, otp }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify OTP');
+        throw new Error(data.error || "Failed to verify OTP");
       }
-      
-      // Sign in with custom token
-      const { signInWithCustomToken } = await import('firebase/auth');
-      const userCredential = await signInWithCustomToken(auth, data.token);
-      
+
+      saveToken(data.token);
+      setCurrentUser({ id: data.user.id });
       setUserProfile(data.user);
-      return userCredential;
+      return data;
     } catch (error) {
       console.error("Error logging in:", error);
       throw error;
     }
   }
 
-  // Admin login with email/password (keeping for backward compatibility)
+  // Admin login with email/password
   async function adminLogin(email, password) {
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    const userDoc = await getDoc(doc(db, "users", result.user.uid));
-    if (!userDoc.exists() || userDoc.data().role !== "admin") {
-      await signOut(auth);
-      throw new Error("Unauthorized: Admin access only");
+    try {
+      const response = await fetch(`${API_URL}/auth/admin-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to login");
+      }
+
+      saveToken(data.token);
+      setCurrentUser({ id: data.user.id });
+      setUserProfile(data.user);
+      return data;
+    } catch (error) {
+      console.error("Error admin login:", error);
+      throw error;
     }
-    await updateDoc(doc(db, "users", result.user.uid), {
-      lastActive: serverTimestamp(),
-    });
-    return result;
   }
 
   function logout() {
+    clearToken();
+    setCurrentUser(null);
     setUserProfile(null);
-    return signOut(auth);
   }
 
-  async function fetchUserProfile(uid) {
+  async function fetchUserProfile() {
+    if (!token) return null;
     try {
-      const userDoc = await getDoc(doc(db, "users", uid));
-      if (userDoc.exists()) {
-        const profile = { id: userDoc.id, ...userDoc.data() };
-        setUserProfile(profile);
-        return profile;
+      const response = await fetch(`${API_URL}/auth/me`, {
+        headers: { ...getAuthHeaders() },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearToken();
+          setCurrentUser(null);
+          setUserProfile(null);
+        }
+        return null;
       }
+
+      const profile = await response.json();
+      setCurrentUser({ id: profile.id });
+      setUserProfile(profile);
+      return profile;
     } catch (error) {
       console.error("Error fetching user profile:", error);
+      return null;
     }
-    return null;
   }
 
   async function updateProfile(data) {
-    if (!currentUser) return;
-    await updateDoc(doc(db, "users", currentUser.uid), {
-      ...data,
-      lastActive: serverTimestamp(),
-    });
-    const updated = await fetchUserProfile(currentUser.uid);
-    return updated;
+    if (!currentUser || !token) return;
+    try {
+      const response = await fetch(`${API_URL}/users/${currentUser.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update profile");
+      }
+
+      const result = await response.json();
+      setUserProfile(result.user);
+      return result.user;
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      throw error;
+    }
   }
 
+  // Check for existing token on mount
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        await fetchUserProfile(user.uid);
-      } else {
-        setUserProfile(null);
+    async function initAuth() {
+      if (token) {
+        await fetchUserProfile();
       }
       setLoading(false);
-    });
-    return unsubscribe;
+    }
+    initAuth();
   }, []);
 
   const value = {
     currentUser,
     userProfile,
     loading,
+    token,
+    getAuthHeaders,
     register,
     login,
     adminLogin,
@@ -190,9 +219,8 @@ export function AuthProvider({ children }) {
     updateProfile,
     fetchUserProfile,
     sendOTP,
-    setupRecaptcha,
     isAdmin: userProfile?.role === "admin",
-    isAuthenticated: !!currentUser,
+    isAuthenticated: !!currentUser && !!token,
     profileType: userProfile?.profileType || "Regular",
   };
 

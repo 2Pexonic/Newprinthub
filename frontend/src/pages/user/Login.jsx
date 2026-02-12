@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import logo from "../../assets/logo.png";
@@ -9,26 +9,8 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const { login, sendOTP, setupRecaptcha } = useAuth();
+  const { login, sendOTP } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setupRecaptcha('login-recaptcha');
-    }, 100);
-    
-    return () => {
-      clearTimeout(timer);
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-          window.recaptchaVerifier = null;
-        } catch (error) {
-          console.error('Error cleaning up reCAPTCHA:', error);
-        }
-      }
-    };
-  }, []);
 
   async function handleSendOTP(e) {
     e.preventDefault();
@@ -93,7 +75,6 @@ export default function Login() {
               />
               <p className="form-help">Enter without country code (e.g., 9876543210)</p>
             </div>
-            <div id="login-recaptcha"></div>
             <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={loading} style={{ marginTop: "1rem" }}>
               {loading ? "Sending OTP..." : "Send OTP"}
             </button>

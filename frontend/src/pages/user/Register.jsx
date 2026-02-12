@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import logo from "../../assets/logo.png";
@@ -13,27 +13,8 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const { register, sendOTP, setupRecaptcha } = useAuth();
+  const { register, sendOTP } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Setup reCAPTCHA when component mounts
-    const timer = setTimeout(() => {
-      setupRecaptcha('register-recaptcha');
-    }, 100);
-    
-    return () => {
-      clearTimeout(timer);
-      if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-          window.recaptchaVerifier = null;
-        } catch (error) {
-          console.error('Error cleaning up reCAPTCHA:', error);
-        }
-      }
-    };
-  }, []);
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -119,7 +100,6 @@ export default function Register() {
                 ))}
               </div>
             </div>
-            <div id="register-recaptcha"></div>
             <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={loading} style={{ marginTop: "1rem" }}>
               {loading ? "Sending OTP..." : "Send OTP"}
             </button>
